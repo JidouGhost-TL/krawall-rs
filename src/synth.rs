@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use crate::freq::KRAWALL_MIX_RATE;
 use crate::sample::{KrawallLoopMode, KrawallSampleView};
 use crate::sequence::{KrawallMixMode, KrawallVoice};
+use crate::version::KrawallVersion;
 
 /// Default Krawall clamp right-shift (`asr #5`), mapping the 16-bit unsigned accumulator
 /// minus DC bias (`total_vol << 4`) into signed 8-bit DirectSound DMA FIFO samples.
@@ -233,6 +234,161 @@ impl AccuracySynth {
         for i in 0..len {
             acc_left[i] = acc_left[i].wrapping_add(bias_l);
             acc_right[i] = acc_right[i].wrapping_add(bias_r);
+        }
+    }
+
+    /// Bit-exact Krawall ARM nearest-neighbor stereo voice mixer for any [`KrawallVersion`].
+    ///
+    /// - [`KrawallVersion::Standard`] & [`KrawallVersion::MidSignedUnpack`]: scales via `(s * vol) >> 3`.
+    /// - [`KrawallVersion::EarlyLsr2`]: scales via `(s * vol) >> 2` (2x higher precision/gain).
+    #[allow(clippy::too_many_arguments)]
+    pub fn mix_nn_stereo_versioned(
+        version: KrawallVersion,
+        pcm_u8: &[u8],
+        pos: &mut usize,
+        frac: &mut u16,
+        inc_q16: i32,
+        vol_left: u8,
+        vol_right: u8,
+        acc_left: &mut [u16],
+        acc_right: &mut [u16],
+    ) {
+        let len = acc_left.len().min(acc_right.len());
+        if len == 0 || pcm_u8.is_empty() {
+            return;
+        }
+        let shift = version.mix_shift();
+        let vl = vol_left as u32;
+        let vr = vol_right as u32;
+        let base_pos = *pos as isize;
+        let mut r7 = *frac as i32;
+
+        for i in 0..len {
+            let idx = (base_pos + (r7 >> 16) as isize) as usize;
+            let s = pcm_u8[idx] as u32;
+            acc_left[i] = acc_left[i].wrapping_add(((s * vl) >> shift) as u16);
+            acc_right[i] = acc_right[i].wrapping_add(((s * vr) >> shift) as u16);
+            r7 = r7.wrapping_add(inc_q16);
+        }
+
+        *pos = (base_pos + (r7 >> 16) as isize) as usize;
+        *frac = (r7 & 0xFFFF) as u16;
+    }
+
+    /// Bit-exact Krawall ARM HQ linear-interpolated stereo voice mixer for any [`KrawallVersion`].
+    ///
+    /// Applies the exact packed `bic` mask (`0x30000` for `EarlyLsr2`, `0x70000` for
+    /// `MidSignedUnpack` / `Standard`) and right shift (`2` vs `3`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn mix_hq_stereo_versioned(
+        version: KrawallVersion,
+        pcm_u8: &[u8],
+        pos: &mut usize,
+        frac: &mut u16,
+        inc_q16: i32,
+        vol_left: u8,
+        vol_right: u8,
+        acc_left: &mut [u16],
+        acc_right: &mut [u16],
+    ) {
+        let len = acc_left.len().min(acc_right.len());
+        if len == 0 || pcm_u8.len() < 2 {
+            return;
+        }
+        let shift = version.mix_shift();
+        let bic_mask = !version.packed_bic_mask();
+        let vl = vol_left as u32;
+        let vr = vol_right as u32;
+        let base_pos = *pos as isize;
+        let mut r7 = *frac as i32;
+
+        let pairs = len / 2;
+        for p in 0..pairs {
+            let idx0 = (base_pos + (r7 >> 16) as isize) as usize;
+            let s0 = pcm_u8[idx0] as u32;
+            let s1 = pcm_u8[idx0 + 1] as u32;
+            let diff0 = s1.wrapping_sub(s0);
+            let f0 = (r7 as u32) & 0xFFFF;
+            let r8 = s0.wrapping_add(f0.wrapping_mul(diff0) >> 16);
+            r7 = r7.wrapping_add(inc_q16);
+
+            let idx1 = (base_pos + (r7 >> 16) as isize) as usize;
+            let t0 = pcm_u8[idx1] as u32;
+            let t1 = pcm_u8[idx1 + 1] as u32;
+            let diff1 = t1.wrapping_sub(t0);
+            let f1 = (r7 as u32) & 0xFFFF;
+            let sb = t0.wrapping_add(f1.wrapping_mul(diff1) >> 16);
+            r7 = r7.wrapping_add(inc_q16);
+
+            let packed = r8.wrapping_add(sb << 16);
+            let lr_l = (packed.wrapping_mul(vl) & bic_mask) >> shift;
+            let lr_r = (packed.wrapping_mul(vr) & bic_mask) >> shift;
+
+            let i0 = p * 2;
+            let w_l = ((acc_left[i0] as u32) | ((acc_left[i0 + 1] as u32) << 16)).wrapping_add(lr_l);
+            acc_left[i0] = (w_l & 0xFFFF) as u16;
+            acc_left[i0 + 1] = (w_l >> 16) as u16;
+
+            let w_r = ((acc_right[i0] as u32) | ((acc_right[i0 + 1] as u32) << 16)).wrapping_add(lr_r);
+            acc_right[i0] = (w_r & 0xFFFF) as u16;
+            acc_right[i0 + 1] = (w_r >> 16) as u16;
+        }
+
+        if !len.is_multiple_of(2) {
+            let idx = (base_pos + (r7 >> 16) as isize) as usize;
+            let s0 = pcm_u8[idx] as u32;
+            let s1 = pcm_u8[idx + 1] as u32;
+            let r8 = s0.wrapping_add(((r7 as u32) & 0xFFFF).wrapping_mul(s1.wrapping_sub(s0)) >> 16);
+            r7 = r7.wrapping_add(inc_q16);
+            let last = len - 1;
+            acc_left[last] = acc_left[last].wrapping_add(((r8.wrapping_mul(vl)) >> shift) as u16);
+            acc_right[last] = acc_right[last].wrapping_add(((r8.wrapping_mul(vr)) >> shift) as u16);
+        }
+
+        *pos = (base_pos + (r7 >> 16) as isize) as usize;
+        *frac = (r7 & 0xFFFF) as u16;
+    }
+
+    /// Bit-exact Krawall ARM DC-bias subtraction & DirectSound 8-bit LUT clamp routine
+    /// parameterized by [`KrawallVersion`].
+    ///
+    /// - [`KrawallVersion::Standard`]: unsigned `u16` unpack (`lsr #16`), bias `total_vol << 4`.
+    /// - [`KrawallVersion::MidSignedUnpack`]: signed `i16` unpack (`asr #16`), bias `total_vol << 4`.
+    /// - [`KrawallVersion::EarlyLsr2`]: signed `i16` unpack (`asr #16`), bias `total_vol << 5`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn clamp_u16_to_dma8_versioned(
+        version: KrawallVersion,
+        acc_left: &[u16],
+        acc_right: &[u16],
+        out_left: &mut [i8],
+        out_right: &mut [i8],
+        total_vol_left: u32,
+        total_vol_right: u32,
+        shift: u32,
+    ) {
+        let len = acc_left
+            .len()
+            .min(acc_right.len())
+            .min(out_left.len())
+            .min(out_right.len());
+        let bias_shift = version.bias_shift();
+        let bias_l = (total_vol_left << bias_shift) as i32;
+        let bias_r = (total_vol_right << bias_shift) as i32;
+        let signed_unpack = version.uses_signed_clamp_unpack();
+
+        for i in 0..len {
+            let al = if signed_unpack {
+                acc_left[i] as i16 as i32
+            } else {
+                acc_left[i] as i32
+            };
+            let ar = if signed_unpack {
+                acc_right[i] as i16 as i32
+            } else {
+                acc_right[i] as i32
+            };
+            out_left[i] = ((al - bias_l) >> shift).clamp(-128, 127) as i8;
+            out_right[i] = ((ar - bias_r) >> shift).clamp(-128, 127) as i8;
         }
     }
 

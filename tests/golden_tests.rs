@@ -19,7 +19,7 @@
 
 use krawall::{
     compute_channel_volumes, freq_to_inc_q16, rate_from_timer_reload, AccuracySynth,
-    KrawallLoopMode, KrawallMixMode, KrawallSampleView, KrawallVoice, StudioSynth,
+    KrawallLoopMode, KrawallMixMode, KrawallSampleView, KrawallVersion, KrawallVoice, StudioSynth,
     KRAWALL_DEFAULT_CLAMP_SHIFT, KRAWALL_MIX_RATE, KRAWALL_TIMER0_RELOAD,
 };
 #[cfg(feature = "alloc")]
@@ -40,6 +40,10 @@ const GOLDEN_FRANKLIN_ONESHOT_SILENCE: &[u8] =
     include_bytes!("golden/franklin_oneshot_silence_tail.bin");
 const GOLDEN_HUGO_NN_STEREO: &[u8] = include_bytes!("golden/hugo_nn_stereo.bin");
 const GOLDEN_HUGO_HQ_STEREO: &[u8] = include_bytes!("golden/hugo_hq_stereo.bin");
+const GOLDEN_RACING_FEVER_MID_NN: &[u8] = include_bytes!("golden/racing_fever_mid_nn_stereo.bin");
+const GOLDEN_RACING_FEVER_MID_CLAMPED: &[u8] = include_bytes!("golden/racing_fever_mid_clamped.bin");
+const GOLDEN_EARLY_LSR2_NN: &[u8] = include_bytes!("golden/early_lsr2_nn_stereo.bin");
+const GOLDEN_EARLY_LSR2_HQ: &[u8] = include_bytes!("golden/early_lsr2_hq_stereo.bin");
 
 fn adjacent_mad_signed(data: &[u8]) -> f64 {
     let mut sum: u64 = 0;
@@ -92,6 +96,10 @@ fn test_manifest_integrity() {
         "franklin_oneshot_silence_tail.bin",
         "hugo_nn_stereo.bin",
         "hugo_hq_stereo.bin",
+        "racing_fever_mid_nn_stereo.bin",
+        "racing_fever_mid_clamped.bin",
+        "early_lsr2_nn_stereo.bin",
+        "early_lsr2_hq_stereo.bin",
     ] {
         assert!(MANIFEST_JSON.contains(expected), "manifest missing {expected}");
     }
@@ -492,6 +500,162 @@ fn test_tier3_hugo_arm_golden_hq_stereo() {
     );
 
     assert_stereo_golden_exact(&dma_l, &dma_r, GOLDEN_HUGO_HQ_STEREO, "hugo_hq_stereo");
+}
+
+#[test]
+fn test_tier3_racing_fever_mid_signed_unpack_nn_stereo() {
+    let view = KrawallSampleView::parse_blob(7, FRANKLIN_S7_BLOB, true).unwrap();
+    let mut acc_l = [0u16; 128];
+    let mut acc_r = [0u16; 128];
+    let mut dma_l = [0i8; 128];
+    let mut dma_r = [0i8; 128];
+    let mut pos = 0usize;
+    let mut frac = 0x2000u16;
+
+    AccuracySynth::mix_nn_stereo_versioned(
+        KrawallVersion::MidSignedUnpack,
+        view.pcm_with_tail(),
+        &mut pos,
+        &mut frac,
+        0x0001_4000,
+        60,
+        36,
+        &mut acc_l,
+        &mut acc_r,
+    );
+    AccuracySynth::clamp_u16_to_dma8_versioned(
+        KrawallVersion::MidSignedUnpack,
+        &acc_l,
+        &acc_r,
+        &mut dma_l,
+        &mut dma_r,
+        60,
+        36,
+        KRAWALL_DEFAULT_CLAMP_SHIFT,
+    );
+
+    assert_stereo_golden_exact(
+        &dma_l,
+        &dma_r,
+        GOLDEN_RACING_FEVER_MID_NN,
+        "racing_fever_mid_nn_stereo",
+    );
+}
+
+#[test]
+fn test_tier3_racing_fever_mid_signed_unpack_clamped() {
+    let view = KrawallSampleView::parse_blob(7, FRANKLIN_S7_BLOB, true).unwrap();
+    let mut acc_l = [0u16; 128];
+    let mut acc_r = [0u16; 128];
+    let mut dma_l = [0i8; 128];
+    let mut dma_r = [0i8; 128];
+
+    let mut tot_l = 0u32;
+    let mut tot_r = 0u32;
+    for start_off in [0usize, 0, 0, 0, 2, 4] {
+        let mut pos = start_off;
+        let mut frac = 0u16;
+        AccuracySynth::mix_nn_stereo_versioned(
+            KrawallVersion::MidSignedUnpack,
+            view.pcm_with_tail(),
+            &mut pos,
+            &mut frac,
+            0x0001_0000,
+            64,
+            64,
+            &mut acc_l,
+            &mut acc_r,
+        );
+        tot_l += 64;
+        tot_r += 64;
+    }
+    AccuracySynth::clamp_u16_to_dma8_versioned(
+        KrawallVersion::MidSignedUnpack,
+        &acc_l,
+        &acc_r,
+        &mut dma_l,
+        &mut dma_r,
+        tot_l,
+        tot_r,
+        KRAWALL_DEFAULT_CLAMP_SHIFT,
+    );
+
+    assert_stereo_golden_exact(
+        &dma_l,
+        &dma_r,
+        GOLDEN_RACING_FEVER_MID_CLAMPED,
+        "racing_fever_mid_clamped",
+    );
+}
+
+#[test]
+fn test_tier3_early_lsr2_arm_golden_nn_stereo() {
+    let view = KrawallSampleView::parse_blob(7, FRANKLIN_S7_BLOB, true).unwrap();
+    let mut acc_l = [0u16; 128];
+    let mut acc_r = [0u16; 128];
+    let mut dma_l = [0i8; 128];
+    let mut dma_r = [0i8; 128];
+    let mut pos = 0usize;
+    let mut frac = 0x3000u16;
+
+    AccuracySynth::mix_nn_stereo_versioned(
+        KrawallVersion::EarlyLsr2,
+        view.pcm_with_tail(),
+        &mut pos,
+        &mut frac,
+        0x0001_3000,
+        48,
+        24,
+        &mut acc_l,
+        &mut acc_r,
+    );
+    AccuracySynth::clamp_u16_to_dma8_versioned(
+        KrawallVersion::EarlyLsr2,
+        &acc_l,
+        &acc_r,
+        &mut dma_l,
+        &mut dma_r,
+        48,
+        24,
+        KRAWALL_DEFAULT_CLAMP_SHIFT,
+    );
+
+    assert_stereo_golden_exact(&dma_l, &dma_r, GOLDEN_EARLY_LSR2_NN, "early_lsr2_nn_stereo");
+}
+
+#[test]
+fn test_tier3_early_lsr2_arm_golden_hq_stereo() {
+    let view = KrawallSampleView::parse_blob(7, FRANKLIN_S7_BLOB, true).unwrap();
+    let mut acc_l = [0u16; 128];
+    let mut acc_r = [0u16; 128];
+    let mut dma_l = [0i8; 128];
+    let mut dma_r = [0i8; 128];
+    let mut pos = 0usize;
+    let mut frac = 0x1800u16;
+
+    AccuracySynth::mix_hq_stereo_versioned(
+        KrawallVersion::EarlyLsr2,
+        view.pcm_with_tail(),
+        &mut pos,
+        &mut frac,
+        0x0000_C800,
+        40,
+        20,
+        &mut acc_l,
+        &mut acc_r,
+    );
+    AccuracySynth::clamp_u16_to_dma8_versioned(
+        KrawallVersion::EarlyLsr2,
+        &acc_l,
+        &acc_r,
+        &mut dma_l,
+        &mut dma_r,
+        40,
+        20,
+        KRAWALL_DEFAULT_CLAMP_SHIFT,
+    );
+
+    assert_stereo_golden_exact(&dma_l, &dma_r, GOLDEN_EARLY_LSR2_HQ, "early_lsr2_hq_stereo");
 }
 
 // ============================================================================

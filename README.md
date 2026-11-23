@@ -22,7 +22,19 @@ The **Krawall Sound Engine** was created by **Sebastian Kienzl** as a high-perfo
 - **Dual Synthesis Engines**:
   - **`AccuracySynth`**: Bit-exact emulation of Krawall's 16,384 Hz ARM IWRAM mixer — both **Nearest-Neighbor** (`0x03000838`) and **HQ Linear-Interpolated** (`0x03000AC0`) kernels, Q16.16 `freq << 2` phase stepping, 2x16-bit packed `(s * vol) >> 3` accumulation, mid-buffer silence-bias fill (`0x03000BC4`), and DC-bias subtraction + DirectSound 8-bit LUT clamping (`0x03000C48`).
   - **`StudioSynth`**: Renders at 48,000 Hz, 32-bit floating-point precision with band-limited Lanczos windowed-sinc interpolation and true equal-power stereo panning.
-- **Byte-Exact mGBA ARM Golden Tested**: 2,048 / 2,048 output bytes verified strictly byte-for-byte (`assert_eq!`) against headless `libmgba` ARM execution of real commercial Krawall binaries (*Franklin the Turtle* and *Hugo - Bukkazoom!*).
+- **Byte-Exact mGBA ARM Golden Tested**: 3,072 / 3,072 output bytes verified strictly byte-for-byte (`assert_eq!`) across all 3 distinct Krawall ARM mixer revisions discovered in the 3,377-ROM GBA corpus (`EarlyLsr2`, `MidSignedUnpack`, and `Standard`).
+
+---
+
+## Supported Krawall Engine Revisions
+
+Auditing all 129 Krawall ROMs across the full 3,377-ROM GBA corpus identified exactly three ARM IWRAM mixer revisions, all supported and byte-exact golden-tested via [`KrawallVersion`]:
+
+| Revision | Era / Corpus Share | Mix Scaling | DC Bias | Clamp Unpack | Channels |
+| --- | --- | --- | --- | --- | --- |
+| `KrawallVersion::EarlyLsr2` | Early 2002 (4 ROMs) | `(s * vol) >> 2` (`bic #0x30000`) | `total_vol << 5` | Signed `i16` (`asr #16`) | 16 |
+| `KrawallVersion::MidSignedUnpack` | 2002–2003 (5 ROMs, e.g. *Racing Fever*, *GP-1 Racing*) | `(s * vol) >> 3` (`bic #0x70000`) | `total_vol << 4` | Signed `i16` (`asr #16`) | 32 |
+| `KrawallVersion::Standard` | 2003–2007 (120 ROMs, e.g. *Franklin the Turtle*, *Hugo - Bukkazoom!*, *The Sims*, *LEGO Star Wars*, *Crash of the Titans*) | `(s * vol) >> 3` (`bic #0x70000`) | `total_vol << 4` | Unsigned `u16` (`lsr #16`) | 32 |
 
 ---
 

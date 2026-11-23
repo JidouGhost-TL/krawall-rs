@@ -166,6 +166,65 @@
       "filename": "hugo_hq_stereo.bin",
       "size": 256,
       "sha256": "0a3f4d8538634aac83637ce73b90554471abc348bba69d1526b520eb2eb33bc3"
+    },
+    "racing_fever_mid_nn_stereo": {
+      "title": "Racing Fever",
+      "version": "MidSignedUnpack",
+      "mode": "nearest_neighbor_stereo",
+      "arm_mix_addr": "0x03000AE0",
+      "arm_clamp_addr": "0x03000EF0",
+      "inc_q16": "0x00014000",
+      "frac_init": "0x2000",
+      "vol_left": 60,
+      "vol_right": 36,
+      "frames_per_channel": 128,
+      "filename": "racing_fever_mid_nn_stereo.bin",
+      "size": 256,
+      "sha256": "2b475f18f16b1e92410f61b61eb2f7f8a21303c2dfaf445f5c2a0d89dd3bbba4"
+    },
+    "racing_fever_mid_clamped": {
+      "title": "Racing Fever",
+      "version": "MidSignedUnpack",
+      "mode": "multi_voice_signed_unpack_clamp",
+      "arm_mix_addr": "0x03000AE0",
+      "arm_clamp_addr": "0x03000EF0",
+      "voice_count": 6,
+      "total_vol_left": 384,
+      "total_vol_right": 384,
+      "frames_per_channel": 128,
+      "filename": "racing_fever_mid_clamped.bin",
+      "size": 256,
+      "sha256": "c114a36c1fb3f641008dd34cb4d680589bb5122d412322b428f20c3682c3b239"
+    },
+    "early_lsr2_nn_stereo": {
+      "title": "Krawall EarlyLsr2 Build",
+      "version": "EarlyLsr2",
+      "mode": "nearest_neighbor_stereo_lsr2",
+      "arm_mix_addr": "0x030008C0",
+      "arm_clamp_addr": "0x03000C4C",
+      "inc_q16": "0x00013000",
+      "frac_init": "0x3000",
+      "vol_left": 48,
+      "vol_right": 24,
+      "frames_per_channel": 128,
+      "filename": "early_lsr2_nn_stereo.bin",
+      "size": 256,
+      "sha256": "c9fbacf4ea20c49492345250682b461a589c1578a6c6ec695fa61f7858a4401f"
+    },
+    "early_lsr2_hq_stereo": {
+      "title": "Krawall EarlyLsr2 Build",
+      "version": "EarlyLsr2",
+      "mode": "hq_linear_interp_stereo_lsr2",
+      "arm_mix_addr": "0x03000B48",
+      "arm_clamp_addr": "0x03000C4C",
+      "inc_q16": "0x0000C800",
+      "frac_init": "0x1800",
+      "vol_left": 40,
+      "vol_right": 20,
+      "frames_per_channel": 128,
+      "filename": "early_lsr2_hq_stereo.bin",
+      "size": 256,
+      "sha256": "c72c54433851cc959e80fc20363f285e18d4f48364a94e609687a79fd26dcfd8"
     }
   }
 }

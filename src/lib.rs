@@ -30,6 +30,7 @@ pub mod freq;
 pub mod sample;
 pub mod sequence;
 pub mod synth;
+pub mod version;
 
 pub use error::{Error, Result};
 pub use freq::{
@@ -45,3 +46,4 @@ pub use sample::{
 };
 pub use sequence::{KrawallEvent, KrawallMixMode, KrawallModule, KrawallPattern, KrawallVoice};
 pub use synth::{sqrt_f64, AccuracySynth, StudioSynth, KRAWALL_DEFAULT_CLAMP_SHIFT};
+pub use version::KrawallVersion;
