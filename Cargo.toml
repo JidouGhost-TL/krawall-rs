@@ -1,6 +1,6 @@
 [package]
 name = "krawall"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["The gbakit Authors"]
 description = "Pure Rust, zero-dependency parser, software synthesizer, and golden-tested emulator for the Krawall GBA Tracker Sound Engine (Game Boy Advance)"
