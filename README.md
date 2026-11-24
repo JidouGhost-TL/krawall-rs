@@ -3,7 +3,7 @@
 **Zero-dependency, pure Rust parser, software synthesizer, and byte-exact golden-tested emulator for the Krawall GBA Tracker Sound Engine (Game Boy Advance).**
 
 [![Crates.io](https://img.shields.io/crates/v/krawall.svg)](https://crates.io/crates/krawall)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
 [![no_std](https://img.shields.io/badge/no__std-compatible-success.svg)](#features)
 
 The **Krawall Sound Engine** was created by **Sebastian Kienzl** as a high-performance, ARM IWRAM-accelerated tracker music and SFX engine for the Game Boy Advance. Running at a power-of-two **16,384 Hz** hardware DirectSound mixing rate (`REG_TM0CNT_L = 0xFC00`), Krawall powered over 100 commercial GBA titles including *The Sims: Bustin' Out*, *The Sims 2*, *LEGO Star Wars: The Video Game*, *Franklin the Turtle*, and *Hugo - Bukkazoom!*.
@@ -18,7 +18,7 @@ The **Krawall Sound Engine** was created by **Sebastian Kienzl** as a high-perfo
 
 - **Zero External Dependencies**: Pure Rust with no dependencies in `[dependencies]`, `#![deny(unsafe_code)]`.
 - **`#![no_std]` Compatible**: Ready for embedded targets and WASM runtimes (`alloc` optional).
-- **Native Krawall Sample Parser**: Zero-allocation [`KrawallSampleView`] parsing Krawall's 18-byte `Sample` header, inline unsigned 8-bit PCM (`0x80` silence center), and 64-byte `mconv` unrolled loop / silence tail.
+- **Native Krawall Sample Parser**: Zero-allocation `KrawallSampleView` parsing Krawall's 18-byte `Sample` header, inline unsigned 8-bit PCM (`0x80` silence center), and 64-byte `mconv` unrolled loop / silence tail.
 - **Dual Synthesis Engines**:
   - **`AccuracySynth`**: Bit-exact emulation of Krawall's 16,384 Hz ARM IWRAM mixer — both **Nearest-Neighbor** (`0x03000838`) and **HQ Linear-Interpolated** (`0x03000AC0`) kernels, Q16.16 `freq << 2` phase stepping, 2x16-bit packed `(s * vol) >> 3` accumulation, mid-buffer silence-bias fill (`0x03000BC4`), and DC-bias subtraction + DirectSound 8-bit LUT clamping (`0x03000C48`).
   - **`StudioSynth`**: Renders at 48,000 Hz, 32-bit floating-point precision with band-limited Lanczos windowed-sinc interpolation and true equal-power stereo panning.
@@ -28,7 +28,7 @@ The **Krawall Sound Engine** was created by **Sebastian Kienzl** as a high-perfo
 
 ## Supported Krawall Engine Revisions
 
-Auditing all 129 Krawall ROMs across the full 3,377-ROM GBA corpus identified exactly three ARM IWRAM mixer revisions, all supported and byte-exact golden-tested via [`KrawallVersion`]:
+Auditing all 129 Krawall ROMs across the full 3,377-ROM GBA corpus identified exactly three ARM IWRAM mixer revisions, all supported and byte-exact golden-tested via `KrawallVersion`:
 
 | Revision | Era / Corpus Share | Mix Scaling | DC Bias | Clamp Unpack | Channels |
 | --- | --- | --- | --- | --- | --- |
@@ -80,6 +80,23 @@ Every mixing path in `AccuracySynth` is verified byte-for-byte against real ARM 
 1. **Tier 1 (Native Sample Format)**: Real Krawall 18-byte headers, unsigned `0x80` PCM continuity, and 64-byte `mconv` unrolled loop/silence tails from *Franklin the Turtle* and *Hugo - Bukkazoom!*.
 2. **Tier 2 (Timer & Fixed-Point Math)**: GBA Timer 0 reload (`0xFC00` -> 16,384 Hz), Q16.16 `freq << 2` step, and exact ARM stereo volume/panning scaling.
 3. **Tier 3 (3,072 / 3,072 Byte-Exact ARM Mixer Goldens)**: Strict `assert_eq!` across 12 controlled ARM execution vectors covering all 3 Krawall mixer revisions (`Standard`, `MidSignedUnpack`, and `EarlyLsr2`): Nearest-Neighbor 1:1, Nearest-Neighbor resampled, HQ Linear-Interpolated resampled (including ARM's exact `lsr #16` halfword carry), forward loop wrap across the 64-byte unrolled tail, 6-voice `+127`/`-128` saturated LUT clamping, one-shot mid-buffer silence-bias fill, *Racing Fever* signed-unpack clamping, *EarlyLsr2* `lsr #2` NN/HQ mixing, and cross-title verification on *Hugo - Bukkazoom!*.
+
+---
+
+## Benchmarks
+
+```sh
+cargo bench --bench bench_audio
+```
+
+| Benchmark | Throughput |
+| --- | ---: |
+| `AccuracySynth::mix_nn_stereo` (1:1, 1,024f) | ~8.15 GSamples/s |
+| `AccuracySynth::mix_nn_stereo` (resampled, 1,024f) | ~1.40 GSamples/s |
+| `AccuracySynth::mix_hq_stereo` (resampled, 1,024f) | ~1.02 GSamples/s |
+| `AccuracySynth::clamp_u16_to_dma8` (`Standard`, 1,024f) | ~5.95 GSamples/s |
+| `AccuracySynth::mix_voice_view` (NN 1:1, 1,024f) | ~6.99 GSamples/s |
+| `StudioSynth::render_voice_f32` (Lanczos-3 48 kHz, 1,024f) | ~216 MSamples/s |
 
 ---
 

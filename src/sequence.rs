@@ -17,7 +17,7 @@ pub enum KrawallMixMode {
 }
 
 /// Active playback channel / voice state mirroring Krawall's 44-byte (`0x2C`) ARM channel struct.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KrawallVoice {
     /// Index of the sample being played.
     pub sample_id: u32,
@@ -114,12 +114,16 @@ impl KrawallVoice {
     #[inline]
     pub fn set_frequency_hz(&mut self, freq_hz: u32) {
         let mag = freq_to_inc_q16(freq_hz);
-        self.inc_q16 = if self.inc_q16 < 0 { -mag } else { mag };
+        self.inc_q16 = if self.inc_q16 < 0 {
+            mag.wrapping_neg()
+        } else {
+            mag
+        };
     }
 }
 
 /// Tracker sequencer event for Krawall modules.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KrawallEvent {
     /// Trigger a sample on `channel` at `freq_hz`, `volume` (`0..=64`), and `pan` (`-64..=64`).
     NoteOn {
@@ -148,7 +152,7 @@ pub enum KrawallEvent {
 }
 
 /// Krawall pattern container.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KrawallPattern {
     pub id: u32,
     pub rows: u16,
@@ -157,7 +161,7 @@ pub struct KrawallPattern {
 }
 
 /// Krawall tracker module metadata and pattern sequence.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KrawallModule {
     pub channels: u8,
     pub initial_speed: u8,

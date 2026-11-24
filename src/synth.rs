@@ -172,14 +172,17 @@ impl AccuracySynth {
         let mut r7 = *frac as i32;
 
         for (l, r) in al.iter_mut().zip(ar.iter_mut()) {
-            let idx = (base_pos + (r7 >> 16) as isize) as usize;
-            let s = pcm_u8[idx] as u32;
+            let idx = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
+            let Some(&b) = pcm_u8.get(idx) else {
+                break;
+            };
+            let s = b as u32;
             *l = l.wrapping_add(((s * vl) >> SHIFT) as u16);
             *r = r.wrapping_add(((s * vr) >> SHIFT) as u16);
             r7 = r7.wrapping_add(inc_q16);
         }
 
-        *pos = (base_pos + (r7 >> 16) as isize) as usize;
+        *pos = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
         *frac = (r7 & 0xFFFF) as u16;
     }
 
@@ -210,8 +213,10 @@ impl AccuracySynth {
         let (l_pairs, _) = acc_left[..pairs_len].as_chunks_mut::<2>();
         let (r_pairs, _) = acc_right[..pairs_len].as_chunks_mut::<2>();
         for (l_pair, r_pair) in l_pairs.iter_mut().zip(r_pairs.iter_mut()) {
-            let idx0 = (base_pos + (r7 >> 16) as isize) as usize;
-            let p0 = &pcm_u8[idx0..idx0 + 2];
+            let idx0 = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
+            let Some(p0) = idx0.checked_add(2).and_then(|e| pcm_u8.get(idx0..e)) else {
+                break;
+            };
             let s0 = p0[0] as u32;
             let s1 = p0[1] as u32;
             let diff0 = s1.wrapping_sub(s0);
@@ -219,8 +224,10 @@ impl AccuracySynth {
             let r8 = s0.wrapping_add(f0.wrapping_mul(diff0) >> 16);
             r7 = r7.wrapping_add(inc_q16);
 
-            let idx1 = (base_pos + (r7 >> 16) as isize) as usize;
-            let p1 = &pcm_u8[idx1..idx1 + 2];
+            let idx1 = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
+            let Some(p1) = idx1.checked_add(2).and_then(|e| pcm_u8.get(idx1..e)) else {
+                break;
+            };
             let t0 = p1[0] as u32;
             let t1 = p1[1] as u32;
             let diff1 = t1.wrapping_sub(t0);
@@ -243,18 +250,22 @@ impl AccuracySynth {
 
         // Handle trailing odd frame if caller passes an odd-length slice
         if !len.is_multiple_of(2) {
-            let idx = (base_pos + (r7 >> 16) as isize) as usize;
-            let p0 = &pcm_u8[idx..idx + 2];
-            let s0 = p0[0] as u32;
-            let s1 = p0[1] as u32;
-            let r8 = s0.wrapping_add(((r7 as u32) & 0xFFFF).wrapping_mul(s1.wrapping_sub(s0)) >> 16);
-            r7 = r7.wrapping_add(inc_q16);
-            let last = len - 1;
-            acc_left[last] = acc_left[last].wrapping_add(((r8.wrapping_mul(vl)) >> SHIFT) as u16);
-            acc_right[last] = acc_right[last].wrapping_add(((r8.wrapping_mul(vr)) >> SHIFT) as u16);
+            let idx = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
+            if let Some(p0) = idx.checked_add(2).and_then(|e| pcm_u8.get(idx..e)) {
+                let s0 = p0[0] as u32;
+                let s1 = p0[1] as u32;
+                let r8 = s0
+                    .wrapping_add(((r7 as u32) & 0xFFFF).wrapping_mul(s1.wrapping_sub(s0)) >> 16);
+                r7 = r7.wrapping_add(inc_q16);
+                let last = len - 1;
+                acc_left[last] =
+                    acc_left[last].wrapping_add(((r8.wrapping_mul(vl)) >> SHIFT) as u16);
+                acc_right[last] =
+                    acc_right[last].wrapping_add(((r8.wrapping_mul(vr)) >> SHIFT) as u16);
+            }
         }
 
-        *pos = (base_pos + (r7 >> 16) as isize) as usize;
+        *pos = base_pos.wrapping_add((r7 >> 16) as isize) as usize;
         *frac = (r7 & 0xFFFF) as u16;
     }
 
@@ -445,18 +456,21 @@ impl AccuracySynth {
         let ar = &acc_right[..len];
         let ol = &mut out_left[..len];
         let or = &mut out_right[..len];
+        let shift = shift.min(31);
         let bias_shift = version.bias_shift();
         let signed = version.uses_signed_clamp_unpack();
         // Algebraic identity: `(a as i16 as i32) - bias == ((a ^ 0x8000) as i32) - (bias + 32768)`.
         // Unifies signed and unsigned unpack into one branchless auto-vectorizable SIMD loop.
         let xor_mask: u16 = if signed { 0x8000 } else { 0 };
         let bias_adj: i32 = if signed { 32_768 } else { 0 };
-        let bias_l = ((total_vol_left << bias_shift) as i32).wrapping_add(bias_adj);
-        let bias_r = ((total_vol_right << bias_shift) as i32).wrapping_add(bias_adj);
+        let bias_l = (total_vol_left.wrapping_shl(bias_shift) as i32).wrapping_add(bias_adj);
+        let bias_r = (total_vol_right.wrapping_shl(bias_shift) as i32).wrapping_add(bias_adj);
 
         for i in 0..len {
-            ol[i] = ((((al[i] ^ xor_mask) as i32) - bias_l) >> shift).clamp(-128, 127) as i8;
-            or[i] = ((((ar[i] ^ xor_mask) as i32) - bias_r) >> shift).clamp(-128, 127) as i8;
+            ol[i] = (((al[i] ^ xor_mask) as i32).wrapping_sub(bias_l) >> shift).clamp(-128, 127)
+                as i8;
+            or[i] = (((ar[i] ^ xor_mask) as i32).wrapping_sub(bias_r) >> shift).clamp(-128, 127)
+                as i8;
         }
     }
 
@@ -484,11 +498,12 @@ impl AccuracySynth {
         let ar = &acc_right[..len];
         let ol = &mut out_left[..len];
         let or = &mut out_right[..len];
-        let bias_l = (total_vol_left << 4) as i32;
-        let bias_r = (total_vol_right << 4) as i32;
+        let shift = shift.min(31);
+        let bias_l = total_vol_left.wrapping_shl(4) as i32;
+        let bias_r = total_vol_right.wrapping_shl(4) as i32;
         for i in 0..len {
-            ol[i] = (((al[i] as i32) - bias_l) >> shift).clamp(-128, 127) as i8;
-            or[i] = (((ar[i] as i32) - bias_r) >> shift).clamp(-128, 127) as i8;
+            ol[i] = ((al[i] as i32).wrapping_sub(bias_l) >> shift).clamp(-128, 127) as i8;
+            or[i] = ((ar[i] as i32).wrapping_sub(bias_r) >> shift).clamp(-128, 127) as i8;
         }
     }
 
@@ -553,12 +568,12 @@ impl AccuracySynth {
                 if voice.pos >= pcm_len {
                     match voice.loop_mode {
                         KrawallLoopMode::Forward if loop_len > 0 => {
-                            voice.pos -= loop_len;
+                            voice.pos = loop_start + ((voice.pos - loop_start) % loop_len);
                             continue;
                         }
                         KrawallLoopMode::PingPong if loop_len > 0 => {
                             voice.pos = pcm_len.saturating_sub(1);
-                            voice.inc_q16 = -voice.inc_q16;
+                            voice.inc_q16 = voice.inc_q16.saturating_neg();
                             continue;
                         }
                         _ => {
@@ -624,13 +639,11 @@ impl AccuracySynth {
                 if voice.pos >= pcm_len {
                     match voice.loop_mode {
                         KrawallLoopMode::Forward if loop_len > 0 => {
-                            while voice.pos >= pcm_len {
-                                voice.pos -= loop_len;
-                            }
+                            voice.pos = loop_start + ((voice.pos - loop_start) % loop_len);
                         }
                         KrawallLoopMode::PingPong if loop_len > 0 => {
                             voice.pos = pcm_len.saturating_sub(1);
-                            voice.inc_q16 = -voice.inc_q16;
+                            voice.inc_q16 = voice.inc_q16.saturating_neg();
                         }
                         _ => {
                             voice.is_active = false;
@@ -684,7 +697,7 @@ impl AccuracySynth {
 
                 if voice.pos <= loop_start {
                     voice.pos = loop_start;
-                    voice.inc_q16 = -voice.inc_q16;
+                    voice.inc_q16 = voice.inc_q16.saturating_neg();
                 }
             }
         }
@@ -749,7 +762,7 @@ impl AccuracySynth {
 
 /// High-fidelity 48,000 Hz `f32` software synthesizer with band-limited windowed-sinc
 /// (Lanczos) interpolation and true equal-power stereo panning.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StudioSynth {
     pub sample_rate: u32,
     /// Number of Lanczos kernel lobes (default `3`, using a compile-time 256-phase
@@ -856,7 +869,7 @@ impl StudioSynth {
                 if pcm_len >= 6 && base >= 2 && base <= safe_max_base && step < (1u64 << 31) as f64
                 {
                     let safe_limit = (safe_max_base as f64) + 0.999_999;
-                    let max_interior = (((safe_limit - ph) / step) as usize) + 1;
+                    let max_interior = (((safe_limit - ph) / step) as usize).saturating_add(1);
                     let run = max_interior.min(frames - idx);
                     if run >= 4 {
                         const Q32_SCALE: f64 = 4_294_967_296.0;
@@ -955,7 +968,7 @@ impl StudioSynth {
         }
 
         // General fallback for custom `sinc_lobes != 3`
-        let a = self.sinc_lobes.max(1) as isize;
+        let a = self.sinc_lobes.clamp(1, 64) as isize;
         let a_f64 = a as f64;
         let mut ph = *pos_f64;
 
@@ -1159,5 +1172,42 @@ mod tests {
         assert!(!voice.is_active);
         assert_eq!(&dma_l[4..], &[0i8; 12]);
         assert_eq!(&dma_r[4..], &[0i8; 12]);
+    }
+
+    #[test]
+    fn test_malformed_inputs_do_not_panic() {
+        let pcm = [0x80u8, 0x90, 0xA0, 0x90, 0x80, 0x70];
+        let mut acc_l = [0u16; 8];
+        let mut acc_r = [0u16; 8];
+        let mut dma_l = [0i8; 8];
+        let mut dma_r = [0i8; 8];
+
+        // OOB start pos in NN & HQ must not panic
+        let mut pos = 999usize;
+        let mut frac = 0u16;
+        AccuracySynth::mix_nn_stereo(&pcm, &mut pos, &mut frac, 0x0001_0000, 64, 64, &mut acc_l, &mut acc_r);
+        AccuracySynth::mix_hq_stereo(&pcm, &mut pos, &mut frac, 0x0001_0000, 64, 64, &mut acc_l, &mut acc_r);
+
+        // Excessive shift & total_vol must not panic
+        AccuracySynth::clamp_u16_to_dma8(&acc_l, &acc_r, &mut dma_l, &mut dma_r, u32::MAX, u32::MAX, 99);
+        AccuracySynth::clamp_u16_to_dma8_versioned(
+            KrawallVersion::EarlyLsr2,
+            &acc_l,
+            &acc_r,
+            &mut dma_l,
+            &mut dma_r,
+            u32::MAX,
+            u32::MAX,
+            99,
+        );
+
+        // Tiny frequency step in StudioSynth must not overflow usize
+        let view = KrawallSampleView::from_unsigned_pcm(0, 16_384, &pcm);
+        let synth = StudioSynth::new(48_000);
+        let mut l = [0.0f32; 8];
+        let mut r = [0.0f32; 8];
+        let mut pf = 2.0;
+        synth.render_voice_f32(&view, &mut pf, 1e-300, 64, 0, &mut l, &mut r);
+        assert!(l.iter().all(|x| x.is_finite()));
     }
 }

@@ -59,7 +59,7 @@ impl KrawallLoopMode {
 /// - `+15`: `pan_default: i8` (`-64..=64`)
 /// - `+16`: `loop_mode: u8` (`0` = none, `1` = forward, `2` = ping-pong)
 /// - `+17`: `flags: u8` (HQ interpolation / sample flags)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KrawallSampleHeader {
     pub loop_length: u32,
     pub end_ptr: u32,
@@ -112,7 +112,7 @@ impl KrawallSampleHeader {
 /// Suitable for `#![no_std]` ROM playback without heap allocation. Stores raw unsigned
 /// 8-bit PCM (`0x80` center) matching the GBA ROM representation directly, and optionally
 /// retains the 64-byte `mconv` unrolled loop/silence tail for bit-exact ARM mixer emulation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KrawallSampleView<'a> {
     pub id: u32,
     pub c2_freq: u32,
@@ -179,8 +179,9 @@ impl<'a> KrawallSampleView<'a> {
         let pcm_offset = header_offset
             .checked_add(KRAWALL_SAMPLE_HEADER_SIZE)
             .ok_or(Error::UnexpectedEof)?;
-        let pcm_bus_start = GBA_ROM_BUS_BASE
-            .checked_add(pcm_offset as u32)
+        let pcm_bus_start = u32::try_from(pcm_offset)
+            .ok()
+            .and_then(|o| GBA_ROM_BUS_BASE.checked_add(o))
             .ok_or(Error::InvalidHeader("pcm offset overflow"))?;
 
         if hdr.end_ptr <= pcm_bus_start {
@@ -392,7 +393,7 @@ impl<'a> KrawallSampleView<'a> {
 
 /// Owned Krawall sample storing unsigned 8-bit PCM (`0x80` center) with a 64-byte unrolled tail.
 #[cfg(feature = "alloc")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KrawallSample {
     pub id: u32,
     pub c2_freq: u32,
