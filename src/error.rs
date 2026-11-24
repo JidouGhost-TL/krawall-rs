@@ -4,6 +4,7 @@ use core::fmt;
 
 /// Errors returned when parsing Krawall sample headers, modules, or audio streams.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
     /// Input buffer ended before a complete header or payload could be read.
     UnexpectedEof,

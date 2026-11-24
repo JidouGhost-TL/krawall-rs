@@ -6,8 +6,9 @@
 //!   *Franklin the Turtle* and *Hugo - Bukkazoom!*.
 //! - **Tier 2**: Krawall 16,384 Hz hardware timer (`0xFC00`), Q16.16 `freq << 2` phase step,
 //!   and exact ARM volume/panning scaling math.
-//! - **Tier 3**: Strict byte-for-byte `assert_eq!` verification (2,048 / 2,048 bytes) of
-//!   `AccuracySynth` against real headless `libmgba` ARM IWRAM mixer dumps:
+//! - **Tier 3**: Strict byte-for-byte `assert_eq!` verification (3,072 / 3,072 bytes) of
+//!   `AccuracySynth` against real headless `libmgba` ARM IWRAM mixer dumps across all 3
+//!   commercial Krawall revisions (`Standard`, `MidSignedUnpack`, and `EarlyLsr2`):
 //!   1. *Franklin the Turtle* Nearest-Neighbor Stereo 1:1 pitch (`0x03000838` + `0x03000C48`)
 //!   2. *Franklin the Turtle* Nearest-Neighbor Stereo resampled (`0x03000838` + `0x03000C48`)
 //!   3. *Franklin the Turtle* HQ Linear-Interpolated Stereo (`0x03000AC0` + `0x03000C48`)
@@ -16,6 +17,10 @@
 //!   6. *Franklin the Turtle* One-shot end-of-sample silence-fill (`0x03000BC4` + `0x03000C48`)
 //!   7. *Hugo - Bukkazoom!* Nearest-Neighbor Stereo (`0x03000CA8` + `0x030010B8`)
 //!   8. *Hugo - Bukkazoom!* HQ Linear-Interpolated Stereo (`0x03000F30` + `0x030010B8`)
+//!   9. *Racing Fever* (`MidSignedUnpack`) Nearest-Neighbor Stereo
+//!   10. *Racing Fever* (`MidSignedUnpack`) 6-voice saturated signed-unpack clamping
+//!   11. `EarlyLsr2` (`lsr #2`) Nearest-Neighbor Stereo
+//!   12. `EarlyLsr2` (`lsr #2`) HQ Linear-Interpolated Stereo
 
 use krawall::{
     compute_channel_volumes, freq_to_inc_q16, rate_from_timer_reload, AccuracySynth,
@@ -188,7 +193,7 @@ fn test_tier2_hardware_timer_and_volume_math() {
 }
 
 // ============================================================================
-// Tier 3: Strict Byte-for-Byte mGBA ARM Golden Mixer Verification (2,048 bytes)
+// Tier 3: Strict Byte-for-Byte mGBA ARM Golden Mixer Verification (3,072 bytes)
 // ============================================================================
 
 #[test]

@@ -26,6 +26,7 @@ pub const KRAWALL_PERIOD_CLOCK: u32 = 14_317_456;
 /// Matches the ARM driver instruction `lsl r2, r3, #2` (`freq_hz << 2`), where
 /// `16,384 Hz` maps to `0x0001_0000` (1.0 sample per output frame).
 #[inline]
+#[must_use]
 pub const fn freq_to_inc_q16(freq_hz: u32) -> i32 {
     (freq_hz << 2) as i32
 }
@@ -33,6 +34,7 @@ pub const fn freq_to_inc_q16(freq_hz: u32) -> i32 {
 /// Convert a playback frequency in Hz to a Q16.16 fixed-point phase increment
 /// for an arbitrary output sample rate.
 #[inline]
+#[must_use]
 pub const fn freq_to_inc_q16_at_rate(freq_hz: u32, output_rate: u32) -> i32 {
     if output_rate == 0 {
         return 0;
@@ -45,12 +47,14 @@ pub const fn freq_to_inc_q16_at_rate(freq_hz: u32, output_rate: u32) -> i32 {
 
 /// Convert a Krawall Q16.16 fixed-point phase increment back to Hz (at 16,384 Hz mix rate).
 #[inline]
+#[must_use]
 pub const fn inc_q16_to_freq(inc_q16: i32) -> u32 {
     inc_q16.unsigned_abs() >> 2
 }
 
 /// Convert a GBA Timer 0 reload value to the corresponding DirectSound sample rate in Hz.
 #[inline]
+#[must_use]
 pub const fn rate_from_timer_reload(reload: u16) -> u32 {
     let cycles = 65_536u32.saturating_sub(reload as u32);
     if cycles == 0 {
@@ -61,6 +65,7 @@ pub const fn rate_from_timer_reload(reload: u16) -> u32 {
 
 /// Convert a tracker period (S3M/MOD style) to a frequency in Hz.
 #[inline]
+#[must_use]
 pub const fn period_to_freq_hz(period: u32) -> u32 {
     if period == 0 {
         return 0;
@@ -80,6 +85,7 @@ pub const fn period_to_freq_hz(period: u32) -> u32 {
 /// where `vol` is `0..=64`, `master_vol` is `0..=128`, and `pan` is `-64..=64` (`0` = center,
 /// `-64` = hard left / mono mode, `+64` = hard right).
 #[inline]
+#[must_use]
 pub const fn compute_channel_volumes(vol: u8, master_vol: u8, pan: i8) -> (u8, u8) {
     let p = if pan < -64 {
         -64
@@ -117,6 +123,7 @@ const SEMITONE_Q16: [u32; 12] = [
 ///
 /// Completely `#![no_std]` and integer-only.
 #[inline]
+#[must_use]
 pub const fn note_to_freq_hz(c2_freq: u32, semitone_offset: i32) -> u32 {
     if c2_freq == 0 {
         return 0;
@@ -141,6 +148,7 @@ pub const fn note_to_freq_hz(c2_freq: u32, semitone_offset: i32) -> u32 {
 /// Convert Krawall's `mconv` precomputed `fine_tune` table offset (in 1/64-semitone units
 /// modulo 65536, signed `i16`) into a fine-tuned playback frequency in Hz.
 #[inline]
+#[must_use]
 pub const fn apply_fine_tune(base_freq: u32, fine_tune: u16) -> u32 {
     if fine_tune == 0 || base_freq == 0 {
         return base_freq;

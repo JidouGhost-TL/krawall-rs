@@ -18,7 +18,7 @@
 //!    and dynamic shift patching in clamp.
 
 /// Distinct Krawall ARM IWRAM mixer revisions found across GBA ROMs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum KrawallVersion {
     /// Early 2002 Krawall (`lsr #2` sample scaling, `bic #0x30000`, `bias = total_vol << 5`,
     /// signed 16-bit unpack clamp, 16 channels, unsigned `lsr #16` phase).
@@ -35,6 +35,7 @@ pub enum KrawallVersion {
 impl KrawallVersion {
     /// Per-sample multiplication right-shift (`2` for `EarlyLsr2`, `3` for `MidSignedUnpack` / `Standard`).
     #[inline]
+    #[must_use]
     pub const fn mix_shift(self) -> u32 {
         match self {
             Self::EarlyLsr2 => 2,
@@ -44,6 +45,7 @@ impl KrawallVersion {
 
     /// ARM 2x16-bit packed `bic` mask preventing low-bit bleed across halfwords during `lsr`.
     #[inline]
+    #[must_use]
     pub const fn packed_bic_mask(self) -> u32 {
         match self {
             Self::EarlyLsr2 => 0x0003_0000,
@@ -54,6 +56,7 @@ impl KrawallVersion {
     /// Left-shift applied to `total_vol` to form the unsigned `0x80` DC silence bias
     /// (`(vol << 7) >> mix_shift`, i.e. `5` for `EarlyLsr2`, `4` for `MidSignedUnpack` / `Standard`).
     #[inline]
+    #[must_use]
     pub const fn bias_shift(self) -> u32 {
         7 - self.mix_shift()
     }
@@ -61,12 +64,14 @@ impl KrawallVersion {
     /// Whether the ARM clamp routine unpacks 16-bit accumulator halfwords as signed `i16`
     /// (`asr #16` / `lsl #16; asr #16`) rather than unsigned `u16` (`lsr #16`).
     #[inline]
+    #[must_use]
     pub const fn uses_signed_clamp_unpack(self) -> bool {
         matches!(self, Self::EarlyLsr2 | Self::MidSignedUnpack)
     }
 
     /// Maximum simultaneous hardware mixer channels for this Krawall build.
     #[inline]
+    #[must_use]
     pub const fn max_channels(self) -> u8 {
         match self {
             Self::EarlyLsr2 => 16,
@@ -76,6 +81,7 @@ impl KrawallVersion {
 
     /// Detect the Krawall mixer revision directly from a GBA ROM or IWRAM image by scanning
     /// for the canonical Krawall ARM mixer prologue and inspecting its scaling/clamp opcodes.
+    #[must_use]
     pub fn detect_from_bytes(data: &[u8]) -> Option<Self> {
         // Canonical Krawall ARM mixer prologue:
         //   ldr  r5, [r0, #8]     (0xE5905008)

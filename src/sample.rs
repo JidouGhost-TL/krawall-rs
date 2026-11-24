@@ -23,7 +23,7 @@ pub const KRAWALL_SILENCE_BYTE: u8 = 0x80;
 pub const GBA_ROM_BUS_BASE: u32 = 0x0800_0000;
 
 /// Loop playback mode stored at byte `+16` of a Krawall `Sample` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum KrawallLoopMode {
     /// One-shot sample; stops and fills DC silence bias after reaching `end`.
     #[default]
@@ -37,6 +37,7 @@ pub enum KrawallLoopMode {
 impl KrawallLoopMode {
     /// Decode a raw Krawall header loop flag byte.
     #[inline]
+    #[must_use]
     pub const fn from_u8(val: u8) -> Option<Self> {
         match val {
             0 => Some(Self::None),
@@ -216,6 +217,7 @@ impl<'a> KrawallSampleView<'a> {
     }
 
     /// Construct a sample view directly from raw unsigned 8-bit PCM (`0x80` center).
+    #[must_use]
     pub const fn from_unsigned_pcm(id: u32, c2_freq: u32, pcm_u8: &'a [u8]) -> Self {
         Self {
             id,
@@ -234,24 +236,28 @@ impl<'a> KrawallSampleView<'a> {
 
     /// Number of active PCM frames (excluding the 64-byte unrolled tail).
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.pcm_u8.len()
     }
 
     /// Whether the sample has zero active frames.
     #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.pcm_u8.is_empty()
     }
 
     /// Contiguous ROM slice containing `pcm_u8` followed by `tail_u8`.
     #[inline]
+    #[must_use]
     pub const fn pcm_with_tail(&self) -> &'a [u8] {
         self.pcm_with_tail
     }
 
     /// Loop start offset in samples, if the sample is looped.
     #[inline]
+    #[must_use]
     pub const fn loop_start(&self) -> Option<usize> {
         if self.loop_length > 0 && (self.loop_length as usize) <= self.pcm_u8.len() {
             Some(self.pcm_u8.len() - self.loop_length as usize)
@@ -262,6 +268,7 @@ impl<'a> KrawallSampleView<'a> {
 
     /// Loop end offset in samples (always `self.len()` when looped).
     #[inline]
+    #[must_use]
     pub const fn loop_end(&self) -> Option<usize> {
         if self.loop_length > 0 && (self.loop_length as usize) <= self.pcm_u8.len() {
             Some(self.pcm_u8.len())
@@ -272,17 +279,20 @@ impl<'a> KrawallSampleView<'a> {
 
     /// Read sample at `idx` as raw unsigned 8-bit PCM (`0x80` = silence).
     #[inline]
+    #[must_use]
     pub const fn sample_u8(&self, idx: usize) -> u8 {
         self.pcm_u8[idx]
     }
 
     /// Read sample at `idx` as centered signed 8-bit PCM (`0` = silence, via `b ^ 0x80`).
     #[inline]
+    #[must_use]
     pub const fn sample_i8(&self, idx: usize) -> i8 {
         (self.pcm_u8[idx] ^ KRAWALL_SILENCE_BYTE) as i8
     }
 
     /// Validate that the 64-byte `mconv` tail matches Krawall's loop or `0x80` silence contract.
+    #[must_use]
     pub fn has_valid_tail(&self) -> bool {
         if self.tail_u8.len() < 8 {
             return false;
@@ -307,14 +317,15 @@ impl<'a> KrawallSampleView<'a> {
     }
 
     /// Return `(min, max)` centered signed 8-bit sample values.
+    #[must_use]
     pub fn min_max(&self) -> (i8, i8) {
-        if self.pcm_u8.is_empty() {
+        let Some((&first, rest)) = self.pcm_u8.split_first() else {
             return (0, 0);
-        }
-        let mut min_val = self.sample_i8(0);
+        };
+        let mut min_val = (first ^ KRAWALL_SILENCE_BYTE) as i8;
         let mut max_val = min_val;
-        for i in 1..self.pcm_u8.len() {
-            let s = self.sample_i8(i);
+        for &b in rest {
+            let s = (b ^ KRAWALL_SILENCE_BYTE) as i8;
             if s < min_val {
                 min_val = s;
             }
@@ -326,18 +337,20 @@ impl<'a> KrawallSampleView<'a> {
     }
 
     /// Return `true` if every active sample equals `0x80` (silence).
+    #[must_use]
     pub fn is_silent(&self) -> bool {
         self.pcm_u8.iter().all(|&b| b == KRAWALL_SILENCE_BYTE)
     }
 
     /// Calculate root-mean-square amplitude over centered signed samples.
+    #[must_use]
     pub fn rms(&self) -> f64 {
         if self.pcm_u8.is_empty() {
             return 0.0;
         }
         let mut sum_sq = 0.0f64;
-        for i in 0..self.pcm_u8.len() {
-            let val = self.sample_i8(i) as f64;
+        for &b in self.pcm_u8 {
+            let val = ((b ^ KRAWALL_SILENCE_BYTE) as i8) as f64;
             sum_sq += val * val;
         }
         crate::synth::sqrt_f64(sum_sq / (self.pcm_u8.len() as f64))
@@ -345,6 +358,7 @@ impl<'a> KrawallSampleView<'a> {
 
     /// Convert this borrowed view into an owned `KrawallSample`.
     #[cfg(feature = "alloc")]
+    #[must_use]
     pub fn to_owned_sample(&self) -> KrawallSample {
         let mut data = Vec::with_capacity(self.pcm_u8.len() + KRAWALL_TAIL_SIZE);
         data.extend_from_slice(self.pcm_u8);
@@ -435,6 +449,7 @@ impl KrawallSample {
     }
 
     /// Borrow this sample as a zero-allocation `KrawallSampleView`.
+    #[must_use]
     pub fn as_view(&self) -> KrawallSampleView<'_> {
         KrawallSampleView {
             id: self.id,
@@ -453,23 +468,27 @@ impl KrawallSample {
 
     /// Number of active PCM samples (excluding the 64-byte tail).
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.pcm_len
     }
 
     /// Whether the sample has zero active frames.
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pcm_len == 0
     }
 
     /// Active unsigned 8-bit PCM slice (`0x80` center).
     #[inline]
+    #[must_use]
     pub fn pcm_u8(&self) -> &[u8] {
         &self.pcm_with_tail[..self.pcm_len]
     }
 
     /// Decode active PCM samples into centered signed 8-bit `i8` (`b ^ 0x80`).
+    #[must_use]
     pub fn to_signed_i8(&self) -> Vec<i8> {
         self.pcm_u8()
             .iter()

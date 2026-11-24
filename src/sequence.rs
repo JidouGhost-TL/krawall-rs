@@ -7,7 +7,7 @@ use crate::freq::{compute_channel_volumes, freq_to_inc_q16};
 use crate::sample::KrawallLoopMode;
 
 /// Interpolation quality mode supported by Krawall's ARM IWRAM mixer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum KrawallMixMode {
     /// Nearest-neighbor resampling (`hq_flag == 0`, e.g. `0x03000838` in *Franklin the Turtle*).
     #[default]
@@ -47,6 +47,7 @@ pub struct KrawallVoice {
 impl KrawallVoice {
     /// Create a new active Krawall voice from sample ID, playback frequency in Hz,
     /// channel volume (`0..=64`), panning (`-64..=64`), and master volume (`0..=128`).
+    #[must_use]
     pub const fn new(
         sample_id: u32,
         freq_hz: u32,
@@ -73,6 +74,7 @@ impl KrawallVoice {
 
     /// Create a voice with explicit Q16.16 phase increment and direct left/right mixer gains.
     #[allow(clippy::too_many_arguments)]
+    #[must_use]
     pub const fn with_raw_params(
         sample_id: u32,
         pos: usize,

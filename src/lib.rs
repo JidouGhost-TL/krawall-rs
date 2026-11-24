@@ -16,8 +16,10 @@
 //!     and DirectSound 8-bit LUT clamping).
 //!   - [`StudioSynth`]: 48,000 Hz `f32` high-fidelity renderer with band-limited Lanczos
 //!     interpolation and equal-power stereo panning.
-//! - **Golden tested**: 2,048 / 2,048 bytes verified strictly byte-for-byte against
-//!   headless `libmgba` ARM execution of real commercial Krawall binaries.
+//! - **Golden tested**: 3,072 / 3,072 bytes verified strictly byte-for-byte against
+//!   headless `libmgba` ARM execution across all 3 commercial Krawall mixer revisions
+//!   ([`KrawallVersion::EarlyLsr2`], [`KrawallVersion::MidSignedUnpack`], and
+//!   [`KrawallVersion::Standard`]).
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(unsafe_code)]

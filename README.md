@@ -79,7 +79,7 @@ Every mixing path in `AccuracySynth` is verified byte-for-byte against real ARM 
 
 1. **Tier 1 (Native Sample Format)**: Real Krawall 18-byte headers, unsigned `0x80` PCM continuity, and 64-byte `mconv` unrolled loop/silence tails from *Franklin the Turtle* and *Hugo - Bukkazoom!*.
 2. **Tier 2 (Timer & Fixed-Point Math)**: GBA Timer 0 reload (`0xFC00` -> 16,384 Hz), Q16.16 `freq << 2` step, and exact ARM stereo volume/panning scaling.
-3. **Tier 3 (2,048 / 2,048 Byte-Exact ARM Mixer Goldens)**: Strict `assert_eq!` across 8 controlled ARM execution vectors covering Nearest-Neighbor 1:1, Nearest-Neighbor resampled, HQ Linear-Interpolated resampled (including ARM's exact `lsr #16` halfword carry), forward loop wrap across the 64-byte unrolled tail, 6-voice `+127`/`-128` saturated LUT clamping, one-shot mid-buffer silence-bias fill, and cross-title verification on *Hugo - Bukkazoom!*.
+3. **Tier 3 (3,072 / 3,072 Byte-Exact ARM Mixer Goldens)**: Strict `assert_eq!` across 12 controlled ARM execution vectors covering all 3 Krawall mixer revisions (`Standard`, `MidSignedUnpack`, and `EarlyLsr2`): Nearest-Neighbor 1:1, Nearest-Neighbor resampled, HQ Linear-Interpolated resampled (including ARM's exact `lsr #16` halfword carry), forward loop wrap across the 64-byte unrolled tail, 6-voice `+127`/`-128` saturated LUT clamping, one-shot mid-buffer silence-bias fill, *Racing Fever* signed-unpack clamping, *EarlyLsr2* `lsr #2` NN/HQ mixing, and cross-title verification on *Hugo - Bukkazoom!*.
 
 ---
 
